@@ -35,7 +35,7 @@ Node* newNode(int id, int at, int bt, int p)
 // Define data structures
 // FIFO Queue for process generator, ready and running processes in Round Robin scheduler, and completed processes
 typedef struct Queue {
-    struct node *head; 
+    struct node *head;
 }queue; 
 
 Node* getHead(queue *q)
@@ -55,31 +55,24 @@ int peek(queue *q)
 
 void enqueue(queue *q, Node *newnode) 
 {
-    newnode->next = q->head;
-    q->head = newnode;
+    if (q->head == NULL) {q->head = newnode; return;}
+
+    Node *current;  
+
+    current = q->head;
+
+    while (current->next != NULL) {
+        current = current->next;
+    }
+ 
+    current->next = newnode;
 }
 
 Node* dequeue(queue *q) 
 {
-
-    if (q->head == NULL) return NULL;
-
-    Node *current, *prev = NULL;    
-    current = q->head;
-    while (current->next != NULL) {
-        prev = current;
-        current = current->next;
-    }
- 
-    if (prev)
-    {
-        prev->next = NULL;
-    }
-    else
-    {
-        q->head = NULL;
-    }
-    return current;
+    Node* dequeued = q->head;
+    q->head = q->head->next;
+    return dequeued;
 }
 
 
@@ -100,6 +93,10 @@ int pisEmpty(pqueue *q)
 
 void ppush(pqueue *q, Node *newnode) 
 { 
+    if (q->head == NULL){
+        q->head = newnode;
+        return;
+    }
 
     if ((q->head)->priority > newnode->priority) { 
         newnode->next = q->head; 

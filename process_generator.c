@@ -3,7 +3,8 @@
 void clearResources(int);
 void sendProcess(int); 
 void endProgram(int); 
-Node *arrivedProc; 
+const Node NULLNODE;
+Node *arrivedProc;
 queue* allProcesses; 
 int time; // stores current time 
 int schedulerPid; // stores the PID of the scheduler
@@ -17,9 +18,7 @@ queue* readFile(char *f)
    FILE *fp = fopen (f, "r");
    char line[100] = {0};
    char *ignore = fgets (line, 100, fp);
-   fscanf(fp, "%d %d %d %d", &i, &a, &b, &p);
-   Node* n = newNode(i, a, b, p);  
-   Q->head = n;
+   Node* n;
    while(fscanf(fp, "%d %d %d %d", &i, &a, &b, &p) == 4)
    {    
     n = newNode(i, a, b, p);
@@ -32,7 +31,7 @@ int main(int argc, char * argv[])
 {
     signal(SIGINT, clearResources); // Clears resources when interrupted 
     signal(SIGUSR1, sendProcess); // Sends arrived processes to scheduler each second when signaled by scheduler
-    signal(SIGUSR2, endProgram); // Test if all processes are send to scheduler and end the program when signaled by scheduler
+    signal(SIGUSR2, endProgram); // Test if all processes are sent to scheduler and end the program when signaled by scheduler
     char file[100]; // name of the input file where processes info is stored 
     int scheduler; // scheduler type
     int quantum = 0; // scheduler time quantum if round robin (remains 0 otherwise)
@@ -55,10 +54,18 @@ int main(int argc, char * argv[])
    
     // Shared memory to send arriving processes to scheduler
     shmidAP = shmget(59, sizeof(Node*), IPC_CREAT|0644);
-    arrivedProc = (Node*)shmat(shmidAP, NULL, 0);
-    if(arrivedProc == (void*)-1)
+
+    //arrivedProc = (Node*)shmat(shmidAP, NULL, 0); //WHY ARE WE READING HERE, WE JUST CREATED THE MEMORY
+
+ //   if(arrivedProc == (void*)-1)
+ //   {
+ //       perror("Error in attach in process generator AP");
+ //       exit(-1);
+ //   }
+
+    if(shmidAP == -1)
     {
-        perror("Error in attach in process generator AP");
+        perror("Error in creating shmidAP");
         exit(-1);
     }
 
@@ -87,7 +94,7 @@ int main(int argc, char * argv[])
 
     else if (schedulerPid == 0)
     {
-        printf("d5lt");
+        printf("d5lt\n");
         char s[4];
         char q[4];
         snprintf(s, 4,"%d", scheduler);
@@ -106,20 +113,23 @@ int main(int argc, char * argv[])
       // If 1 clock second passes, increment internal time counter and check queue of all processes
       if (getClk() > time)
         {
-          time++;   
+          time++;  
+          printf("Generator Attached \n");
+          arrivedProc = (Node*)shmat(shmidAP, NULL, 0); 
           // If any process arrived at this second, add it to arrived process shared memory and signal scheduler to execute second
           if (peek(allProcesses) == time)
           {
            n = dequeue(allProcesses);
-           arrivedProc = n;
-           kill(schedulerPid, SIGUSR1);
+           *arrivedProc = *n;
           }
           // If no process arrived at current second, signal scheduler to execute second 
           else 
           {
-           arrivedProc = NULL;
-           kill(schedulerPid, SIGUSR1);
-          }          
+            *arrivedProc = NULLNODE;
+          }   
+          printf("Generator Detached \n");      
+          shmdt(arrivedProc); 
+          kill(schedulerPid, SIGUSR1);
         }
     }
 
@@ -137,22 +147,26 @@ void clearResources(int signum)
 // Sends arrived processes to scheduler each second when signaled by scheduler
 void sendProcess(int signum)
 {
+    printf("Generator Attached \n");
+    arrivedProc = (Node*)shmat(shmidAP, NULL, 0); 
     if (peek(allProcesses) == time)
     {
      Node* n = dequeue(allProcesses);
-     arrivedProc = n;
-     kill(schedulerPid, SIGUSR2);
+     *arrivedProc = *n;
     }
     // If no other process arrived at current second, signal scheduler to execute second 
     else 
     {
-     arrivedProc = NULL;
-     kill(schedulerPid, SIGUSR2);
+     *arrivedProc = NULLNODE;
     } 
+    shmdt(arrivedProc);
+    kill(schedulerPid, SIGUSR1);
+    printf("Generator Detached \n");
+
 }
 
 
-// Test if all processes are send to scheduler and end the program when signaled by scheduler
+// Test if all processes are sent to scheduler and end the program when signaled by scheduler
 void endProgram(int signum)
 {
     if (isEmpty(allProcesses))
@@ -161,7 +175,6 @@ void endProgram(int signum)
       destroyClk(true);
       kill(schedulerPid, SIGINT);
     } 
-
 }
 
 
