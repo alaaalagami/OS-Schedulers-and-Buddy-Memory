@@ -102,6 +102,7 @@ int main(int argc, char * argv[])
         char *argv[] = { "./scheduler.out", s, q, 0 };// q is zero if not round robin 
         execve(argv[0], &argv[0], NULL);
     }
+    sleep(3);
 
     // Initialize time counter
     time = -1;
@@ -113,11 +114,10 @@ int main(int argc, char * argv[])
       // If 1 clock second passes, increment internal time counter and check queue of all processes
       if (getClk() > time)
         {
-          time++;  
-          printf("Generator Attached \n");
+          time++;
           arrivedProc = (Node*)shmat(shmidAP, NULL, 0); 
           // If any process arrived at this second, add it to arrived process shared memory and signal scheduler to execute second
-          if (peek(allProcesses) == time)
+          if (!isEmpty(allProcesses) && peek(allProcesses) == time)
           {
            n = dequeue(allProcesses);
            *arrivedProc = *n;
@@ -127,7 +127,6 @@ int main(int argc, char * argv[])
           {
             *arrivedProc = NULLNODE;
           }   
-          printf("Generator Detached \n");      
           shmdt(arrivedProc); 
           kill(schedulerPid, SIGUSR1);
         }
@@ -147,9 +146,8 @@ void clearResources(int signum)
 // Sends arrived processes to scheduler each second when signaled by scheduler
 void sendProcess(int signum)
 {
-    printf("Generator Attached \n");
     arrivedProc = (Node*)shmat(shmidAP, NULL, 0); 
-    if (peek(allProcesses) == time)
+    if (!isEmpty(allProcesses) && peek(allProcesses) == time)
     {
      Node* n = dequeue(allProcesses);
      *arrivedProc = *n;
@@ -161,8 +159,6 @@ void sendProcess(int signum)
     } 
     shmdt(arrivedProc);
     kill(schedulerPid, SIGUSR1);
-    printf("Generator Detached \n");
-
 }
 
 

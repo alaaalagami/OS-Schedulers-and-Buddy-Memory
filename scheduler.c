@@ -1,11 +1,16 @@
 #include "headers.h"
+const Node NULLNODE;
 
 void executeSecond(int); 
 void endScheduler(int);
+void freeScheduler(int);
+
 int scheduler; // Stores scheduler type (1 = HPF, 2 = SJF, 3 = RR, 4 = SRTN)
 int shmidAP;
 Node *arrivedProc; 
 int shmidRT; 
+bool isBusy; // Flag to know if there is a current running process
+Node* runningProcess;
 
 // Data structures to be used by the different scheduler types to store PCBs 
 queue *Q;
@@ -23,6 +28,9 @@ int main(int argc, char * argv[])
 
     signal(SIGUSR1, executeSecond); // Takes incoming arrived process from process_generator and excutes the second's scheduling
     signal(SIGINT, endScheduler); // Ends scheduler when interrupted or ended by process_generator 
+    signal(SIGUSR2, freeScheduler);
+
+    isBusy = false; // Initially no processes are running
 
     // Define queues to be used 
     Q = (queue*)malloc(sizeof(queue));
@@ -30,7 +38,7 @@ int main(int argc, char * argv[])
     bQ = (bqueue*)malloc(sizeof(bqueue));
     rQ = (rqueue*)malloc(sizeof(rqueue));
     finishedQ = (queue*)malloc(sizeof(queue)); // To keep finished processes
-
+    runningProcess = (Node*)malloc(sizeof(Node));
     // Shared memory to get arriving processes
     shmidAP = shmget(59, sizeof(Node*), 0);
     //WHY ARE WE ATTACHING HERE?
@@ -47,7 +55,7 @@ int main(int argc, char * argv[])
     }
     
     // Shared memory for stopped process to place its remaining time
-    //shmidRT = shmget(49, sizeof(int*), IPC_CREAT|0644);
+    shmidRT = shmget(49, sizeof(int*), IPC_CREAT|0644);
     //int *shmaddr = (int*)shmat(shmidRT, NULL, 0);
     //if(shmaddr == (void*)-1)
     //{
@@ -65,24 +73,20 @@ int main(int argc, char * argv[])
 void executeSecond(int signum)
 {
     // WE SHOULD ATTACH HERE
+    Node* n; // Spare Node pointer
     arrivedProc = (Node*)shmat(shmidAP, NULL, 0);
     if(arrivedProc == (void*)-1)
     {
         perror("Error in attach in scheduler AP");
         exit(-1);
     }
-    printf("Schedule Attached \n");
 
     // Add arrived process to scheduler's working queue
     if (arrivedProc->ID > 0)
     {
-      printf("Not NULL \n");
-      printf("I am going to schedulers now \n");
-
       if (scheduler == 1){
-        printf("I am going to scheduler 1 now \n");
-        ppush(pQ, arrivedProc); 
-        printf("Pushed! \n");
+        ppush(pQ, newNode(arrivedProc->ID,arrivedProc->arrivalTime,arrivedProc->burstTime, arrivedProc->priority));
+        printf("%d: Pushed process #%d! \n",getClk(),arrivedProc->ID);
       }
       else if (scheduler == 2)
         bpush(bQ, arrivedProc); 
@@ -91,23 +95,88 @@ void executeSecond(int signum)
       else
         rpush(rQ, arrivedProc);
 
-      printf("I am going to trigger the signal \n");
       kill(getppid(), SIGUSR1); // Requests other arrived processes if any
     }
   else // if no more processes arrived, scheduler executes second's actions
    {
-      printf("IS NULL \n");
+      if (scheduler == 1 && !pisEmpty(pQ)){
+
+        if (runningProcess->ID > 0 && ppeek(pQ) < runningProcess->priority){ // Preemption
+
+          kill(runningProcess->pid, SIGUSR2);
+          sleep(1);
+          int *shmaddr = (int*)shmat(shmidRT, NULL, 0);
+          runningProcess->remainingTime = *shmaddr;
+            printf("%d: Process %d is getting preempted by Process %d. Rem time = %d\n", getClk(), runningProcess->ID, pQ->head->ID, runningProcess->remainingTime);
+          //  printf("SENDING PID: %d\n", runningProcess->pid);
+            Node* myNode = newNode(runningProcess->ID, runningProcess->arrivalTime, runningProcess->remainingTime, runningProcess->priority);
+            myNode->pid = runningProcess->pid;
+            ppush(pQ, myNode);
+            isBusy = false;
+          }
+
+        if (!isBusy){
+          isBusy = true;
+          n = ppop(pQ); 
+          runningProcess = n;
+          if (n->pid == -1){ // Process not initiated yet
+             int processPid = fork();
+
+             if (processPid == -1)
+               printf("Error in forking process #%d\n", n->ID);
+
+             else if (processPid == 0)
+              {
+               printf("%d: Process #%d ready for action!\n",getClk(),n->ID);
+               char remainingTime[4];
+               char ID[4];
+               snprintf(remainingTime, 4,"%d", n->remainingTime);
+               snprintf(ID, 4,"%d", n->ID);
+               char *argv[] = { "./process.out", remainingTime, ID, 0 };
+               execve(argv[0], &argv[0], NULL);
+              }
+
+              runningProcess->pid = processPid;
+              printf("LE PID: %d\n", processPid);
+          }
+          else // Process is continued not initiated
+          {
+              printf("%d: Process #%d ready for MORE action!\n",getClk(), n->ID);
+              kill(n->pid, SIGCONT);
+              
+             // char remainingTime[4];
+             // snprintf(remainingTime, 4,"%d", n->remainingTime);
+             // char *argv[] = { "./process.out", remainingTime, 0 };
+             // execve(argv[0], &argv[0], NULL);
+          }
+          
+        }
+      }
+      else if (scheduler == 2)
+         {}
+      else if (scheduler == 3)
+         {}
+      else
+        {}
+    }
+    //WE SHOULD DETACH HERE
+    shmdt(arrivedProc);
+
       //////////////////////// SCHEDULING GOES HERE ///////////////////////
       // if's to test if queue of arrived is empty and no process is running
       // kill(getppid(), SIGUSR2); // Calls process generator to test if all processes have arrived to scheduler and end program
     
       // Note: to make a new Node pointer call newNode(int id, int at, int bt, int p) (check data_structires.h for node and DS details)
       // Note 2: when exiting free() all pointers (zy delelte fe cpp)
-    }
-    //WE SHOULD DETACH HERE
-    printf("Schedule Detached \n");
-    shmdt(arrivedProc);
 }
+
+// Frees the scheduler when a process is finished 
+void freeScheduler(int signum)
+{
+    isBusy = false;
+    *runningProcess = NULLNODE;
+}
+
 
 // Ends scheduler when interrupted or ended by process_generator 
 void endScheduler(int signum)

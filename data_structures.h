@@ -57,7 +57,7 @@ void enqueue(queue *q, Node *newnode)
 {
     if (q->head == NULL) {q->head = newnode; return;}
 
-    Node *current;  
+    Node *current;
 
     current = q->head;
 
@@ -114,10 +114,16 @@ void ppush(pqueue *q, Node *newnode)
 
 Node* ppop(pqueue *q) 
 { 
-    Node* temp = q->head; 
+    Node* temp = malloc(sizeof(Node*)); 
+    temp = q->head;
     q->head = (q->head)->next; 
     return temp; 
 }  
+
+int ppeek(pqueue *q) 
+{ 
+    return (q -> head -> priority);
+} 
 
 // Heap by burst time for ready processes in SJF scheduler (no preemption so running processes move to completed processes queue right away)
 typedef struct burstQueue {
