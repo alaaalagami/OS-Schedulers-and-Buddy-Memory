@@ -70,9 +70,10 @@ void enqueue(queue *q, Node *newnode)
 
 Node* dequeue(queue *q) 
 {
-    Node* dequeued = q->head;
-    q->head = q->head->next;
-    return dequeued;
+    Node* temp = malloc(sizeof(Node*)); 
+    temp = q->head;
+    q->head = (q->head)->next; 
+    return temp;
 }
 
 
@@ -120,7 +121,7 @@ Node* ppop(pqueue *q)
     return temp; 
 }  
 
-int ppeek(pqueue *q) 
+int ppeek(pqueue *q)
 { 
     return (q -> head -> priority);
 } 
@@ -142,6 +143,10 @@ int bisEmpty(bqueue *q)
 
 void bpush(bqueue *q, Node *newnode) 
 { 
+    if (q->head == NULL){
+      q->head = newnode;
+      return;
+    }
 
     if ((q->head)->burstTime > newnode->burstTime) { 
         newnode->next = q->head; 
@@ -159,10 +164,16 @@ void bpush(bqueue *q, Node *newnode)
 
 Node* bpop(bqueue *q) 
 { 
-    Node* temp = q->head; 
+    Node* temp = malloc(sizeof(Node*)); 
+    temp = q->head;
     q->head = (q->head)->next; 
     return temp; 
 }  
+
+int bpeek(bqueue *q) 
+{ 
+    return (q -> head -> burstTime);
+} 
 
 // Heap by remaining time for ready processes in SRTN scheduler (the running process will be saved individually)
 typedef struct remainingQueue {
@@ -181,6 +192,10 @@ int risEmpty(rqueue *q)
 
 void rpush(rqueue *q, Node *newnode) 
 { 
+    if (q->head == NULL){
+      q->head = newnode;
+      return;
+    }
 
     if ((q->head)->remainingTime > newnode->remainingTime) { 
         newnode->next = q->head; 
@@ -198,8 +213,14 @@ void rpush(rqueue *q, Node *newnode)
 
 Node* rpop(rqueue *q) 
 { 
-    Node* temp = q->head; 
+    Node* temp = malloc(sizeof(Node*)); 
+    temp = q->head;
     q->head = (q->head)->next; 
     return temp; 
 }  
+
+int rpeek(rqueue *q) 
+{ 
+    return (q -> head -> remainingTime);
+} 
 

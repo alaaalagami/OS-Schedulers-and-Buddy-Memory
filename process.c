@@ -35,6 +35,7 @@ int main(int agrc, char * argv[])
     destroyClk(false);
 
     kill(getppid(), SIGUSR2);
+    printf("Signal Sent...\n");
    // int myPid = getpid();
    // exit(myPid);
     raise(SIGINT);
@@ -49,12 +50,12 @@ void sendRT(int signum)
 
     int shmidRT = shmget(49, sizeof(int*), 0);
     int *shmaddr = (int*)shmat(shmidRT, NULL, 0);
-
     if(shmaddr == (void*)-1)
     {
         perror("Error in attach in process");
         exit(-1);
     }
+    printf("Connected to shared memory!\n");
 
     *shmaddr = remainingtime;
     shmdt(shmaddr);
@@ -67,6 +68,7 @@ void sendRT(int signum)
        raise(SIGINT);
     }
 
+    printf("Going to send the stop signal to myself..\n");
  //   signal(SIGSTOP, SIG_DFL);
      raise(SIGSTOP);
 }
