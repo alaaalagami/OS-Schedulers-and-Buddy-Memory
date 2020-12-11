@@ -2,6 +2,7 @@
 
 int remainingtime;
 int ID;
+int timeNow;
 
 void sendRT(int signum);
 void continueTesting(int signum);
@@ -13,7 +14,7 @@ int main(int agrc, char * argv[])
 
     // Initializes clock and loops till 1 clock second passes while remaining time for the process is greater than 0
     initClk(); 
-    int timeNow = getClk();
+    timeNow = getClk();
     remainingtime = atoi(argv[1]);
     ID = atoi(argv[2]);
     printf("%d: I AM PROCESS #%d and remaining time %d\n", getClk(), ID, remainingtime);
@@ -23,19 +24,18 @@ int main(int agrc, char * argv[])
         // If 1 second passes, increments time counter and decrements remaining time 
         if (getClk() > timeNow) 
         {
-          timeNow = getClk();
           remainingtime--; 
+          timeNow = getClk();
           printf("%d: Process #%d: %d and timeNow = %d\n", getClk(), ID, remainingtime, timeNow);
         }
     }
     
-    printf("%d: Process %d time has ended\n", getClk(), ID);
+    printf("%d: Process #%d time has ended\n", getClk(), ID);
 
     // When remaining time ends, a process detaches from clock and sends its PID as exit code to the scheduler
     destroyClk(false);
 
     kill(getppid(), SIGUSR2);
-    printf("Signal Sent...\n");
    // int myPid = getpid();
    // exit(myPid);
     raise(SIGINT);
@@ -46,7 +46,7 @@ int main(int agrc, char * argv[])
 // Sends remaining time back to scheduler when stopped by scheduler 
 void sendRT(int signum)
 {
-    printf("%d: Process %d is getting preempted. Remain time = %d\n", getClk(), ID, remainingtime);
+  //  printf("%d: Process %d is getting preempted. Remain time = %d\n", getClk(), ID, remainingtime);
 
     int shmidRT = shmget(49, sizeof(int*), 0);
     int *shmaddr = (int*)shmat(shmidRT, NULL, 0);
@@ -55,10 +55,11 @@ void sendRT(int signum)
         perror("Error in attach in process");
         exit(-1);
     }
-    printf("Connected to shared memory!\n");
 
     *shmaddr = remainingtime;
     shmdt(shmaddr);
+
+    kill(getppid(),SIGHUP);
 
     // If remaining time = 0 process exits
     if (remainingtime == 0)
@@ -68,7 +69,6 @@ void sendRT(int signum)
        raise(SIGINT);
     }
 
-    printf("Going to send the stop signal to myself..\n");
  //   signal(SIGSTOP, SIG_DFL);
      raise(SIGSTOP);
 }

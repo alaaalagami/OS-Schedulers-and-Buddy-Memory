@@ -4,8 +4,11 @@ const Node NULLNODE;
 void executeSecond(int); 
 void endScheduler(int);
 void freeScheduler(int);
+void readRemainingTime(int);
 
 int scheduler; // Stores scheduler type (1 = HPF, 2 = SJF, 3 = RR, 4 = SRTN)
+int quantum;
+int quantumCounter;
 int shmidAP;
 Node *arrivedProc; 
 int shmidRT; 
@@ -22,13 +25,15 @@ queue *finishedQ; // To keep finished processes
 int main(int argc, char * argv[])
 {
     initClk();
+    int time = getClk();
     scheduler = atoi(argv[1]); // scheduler type
-    int quantum = atoi(argv[2]); // time quantum if using Round Robin
+    quantum = atoi(argv[2]); // time quantum if using Round Robin
     printf("%d %d\n", scheduler, quantum); // Just here to test when the program fails and the program fails even before coming here :)
 
     signal(SIGUSR1, executeSecond); // Takes incoming arrived process from process_generator and excutes the second's scheduling
     signal(SIGINT, endScheduler); // Ends scheduler when interrupted or ended by process_generator 
     signal(SIGUSR2, freeScheduler);
+    signal(SIGHUP, readRemainingTime);
 
     isBusy = false; // Initially no processes are running
 
@@ -62,6 +67,10 @@ int main(int argc, char * argv[])
     //    perror("Error in attach in scheduler RT");
     //    exit(-1);
     //}
+    quantumCounter = 0;
+
+    FILE *fp = fopen ("Scheduler.log", "r");
+    
 
     while (1)
     {
@@ -108,16 +117,8 @@ void executeSecond(int signum)
       if (scheduler == 1 && !pisEmpty(pQ)){
 
         if (runningProcess->ID > 0 && ppeek(pQ) < runningProcess->priority){ // Preemption
-
           kill(runningProcess->pid, SIGUSR2);
-          sleep(1);
-          int *shmaddr = (int*)shmat(shmidRT, NULL, 0);
-          runningProcess->remainingTime = *shmaddr;
-            printf("%d: Process %d is getting preempted by Process %d. Rem time = %d\n", getClk(), runningProcess->ID, pQ->head->ID, runningProcess->remainingTime);
-            Node* myNode = newNode(runningProcess->ID, runningProcess->arrivalTime, runningProcess->remainingTime, runningProcess->priority);
-            myNode->pid = runningProcess->pid;
-            ppush(pQ, myNode);
-            isBusy = false;
+          pause();
         }
 
         if (!isBusy){
@@ -140,7 +141,6 @@ void executeSecond(int signum)
                char *argv[] = { "./process.out", remainingTime, ID, 0 };
                execve(argv[0], &argv[0], NULL);
               }
-
               runningProcess->pid = processPid;
           }
           else // Process is continued not initiated
@@ -148,7 +148,7 @@ void executeSecond(int signum)
               printf("%d: Process #%d ready for MORE action!\n",getClk(), n->ID);
               kill(n->pid, SIGCONT);
           }
-          
+
         }
       }
       else if (scheduler == 2 && !bisEmpty(bQ)){
@@ -173,23 +173,60 @@ void executeSecond(int signum)
           runningProcess->pid = processPid;
         }
       }
-      else if (scheduler == 3 && !isEmpty(Q)){
+      else if (scheduler == 3){
+  //      printf("%d: Quantum Counter: %d\n", getClk(), quantumCounter);
+        if (isBusy){
+          quantumCounter++;
+       //   printf("Counter Incremented!\n");
+          if (quantumCounter == quantum){ // The quantum has passed
+            if (getHead(Q)){ // There are other waiting processes
+              kill(runningProcess->pid, SIGUSR2);
+              pause();
+              quantumCounter = -1;
+              }
+            else{ // There are no other processes so give the processes another quantum
+            if (quantumCounter == quantum){
+              quantumCounter = 0;
+            }
+            }
+          }
+        }
+
+        if (!isBusy && !isEmpty(Q)){ // Scheduler is free
+             isBusy = true;
+            // quantumCounter = 0;
+             n = dequeue(Q); 
+             runningProcess = n;
+            if (n->pid == -1){ // Process not initiated yet
+               int processPid = fork();
+
+               if (processPid == -1)
+                 printf("Error in forking process #%d\n", n->ID);
+               else if (processPid == 0)
+                {
+                 printf("%d: Process #%d ready for action!\n",getClk(),n->ID);
+                 char remainingTime[4];
+                 char ID[4];
+                 snprintf(remainingTime, 4,"%d", n->remainingTime);
+                 snprintf(ID, 4,"%d", n->ID);
+                 char *argv[] = { "./process.out", remainingTime, ID, 0 };
+                 execve(argv[0], &argv[0], NULL);
+                }
+              runningProcess->pid = processPid;
+             }
+            else // Process is continued not initiated
+            {
+               printf("%d: Process #%d ready for MORE action!\n",getClk(), n->ID);
+               quantumCounter = -1;
+               kill(n->pid, SIGCONT);
+            }
+          }
 
       }
       else if (scheduler == 4 && !risEmpty(rQ)){
         if (runningProcess->ID > 0 && rpeek(rQ) < runningProcess->remainingTime){ // Preemption
-          printf("OH DAMN WE NEED PREEMPT!!\n");
           kill(runningProcess->pid, SIGUSR2);
-          sleep(1);
-          printf("Just Woke Up!!\n");
-          int *shmaddr = (int*)shmat(shmidRT, NULL, 0);
-          printf("Connected to shared memory!!\n");
-          runningProcess->remainingTime = *shmaddr;
-          printf("%d: Process %d is getting preempted by Process %d. Rem time = %d\n", getClk(), runningProcess->ID, rQ->head->ID, runningProcess->remainingTime);
-          Node* myNode = newNode(runningProcess->ID, runningProcess->arrivalTime, runningProcess->remainingTime, runningProcess->priority);
-          myNode->pid = runningProcess->pid;
-          rpush(rQ, myNode);
-          isBusy = false;
+          pause();
         }
 
         if (!isBusy){
@@ -229,9 +266,10 @@ void executeSecond(int signum)
 // Frees the scheduler when a process is finished 
 void freeScheduler(int signum)
 {
-  printf("I AM FREEE \n");
   isBusy = false;
+
   *runningProcess = NULLNODE;
+  quantumCounter = 0;
 }
 
 
@@ -241,6 +279,27 @@ void endScheduler(int signum)
     destroyClk(true);
     shmctl(shmidRT, IPC_RMID, NULL);
     // Create perf file
+}
+
+void readRemainingTime(int signum){
+  int *shmaddr = (int*)shmat(shmidRT, NULL, 0);
+  runningProcess->remainingTime = *shmaddr;
+  Node* myNode = newNode(runningProcess->ID, runningProcess->arrivalTime, runningProcess->remainingTime, runningProcess->priority);
+  myNode->pid = runningProcess->pid;
+  isBusy = false;
+
+  if (scheduler == 1){
+    printf("%d: Process %d is getting preempted by Process %d. Rem time = %d\n", getClk(), runningProcess->ID, pQ->head->ID, runningProcess->remainingTime);
+    ppush(pQ, myNode);
+  }
+  else if (scheduler == 3){
+    printf("%d: Process %d is getting preempted by Process %d. Rem time = %d\n", getClk(), runningProcess->ID, Q->head->ID, runningProcess->remainingTime);
+    enqueue(Q, myNode);
+  }
+  else if (scheduler == 4){
+    printf("%d: Process %d is getting preempted by Process %d. Rem time = %d\n", getClk(), runningProcess->ID, rQ->head->ID, runningProcess->remainingTime);
+    rpush(rQ, myNode);
+  }
 }
 
 

@@ -8,7 +8,6 @@ typedef struct node {
     int burstTime; 
     int priority;
     int remainingTime; // only necassary when using SRTN, initially set as burst time, then changed for SRTN processes as they proceed
-    int finishTime; // to be set by scheduler when the process exits
     int status; // -1 = not arrived, 1 = running, 2 = waiting
     int pid; // to be set when process is forked from scheduler
   
@@ -24,7 +23,6 @@ Node* newNode(int id, int at, int bt, int p)
     n->burstTime = bt;  
     n->priority = p; 
     n->remainingTime = bt;
-    n->finishTime = -1; 
     n->status = -1; 
     n->pid = -1; 
     n->next = NULL; 
