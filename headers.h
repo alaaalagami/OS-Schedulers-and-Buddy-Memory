@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <string.h>
+#include <math.h>
 #include "data_structures.h"
 
 typedef short bool;

@@ -23,13 +23,14 @@ queue* readFile(char *f)
    {    
     n = newNode(i, a, b, p);
     enqueue(Q, n); 
-   }  
+   }
+   fclose(fp);
    return Q; 
 }
 
 int main(int argc, char * argv[])
 {
-    signal(SIGINT, clearResources); // Clears resources when interrupted 
+ //   signal(SIGINT, clearResources); // Clears resources when interrupted 
     signal(SIGUSR1, sendProcess); // Sends arrived processes to scheduler each second when signaled by scheduler
     signal(SIGUSR2, endProgram); // Test if all processes are sent to scheduler and end the program when signaled by scheduler
     char file[100]; // name of the input file where processes info is stored 
@@ -102,7 +103,7 @@ int main(int argc, char * argv[])
         char *argv[] = { "./scheduler.out", s, q, 0 };// q is zero if not round robin 
         execve(argv[0], &argv[0], NULL);
     }
-    sleep(3);
+    pause();
 
     // Initialize time counter
     time = -1;
@@ -137,11 +138,11 @@ int main(int argc, char * argv[])
 }
 
 // Clear resources when interrupted 
-void clearResources(int signum)
-{
-    shmctl(shmidAP, IPC_RMID, NULL);
-    destroyClk(true);
-}
+//void clearResources(int signum)
+//{
+//    shmctl(shmidAP, IPC_RMID, NULL);
+//    destroyClk(true);
+//}
 
 // Sends arrived processes to scheduler each second when signaled by scheduler
 void sendProcess(int signum)
@@ -170,6 +171,7 @@ void endProgram(int signum)
       shmctl(shmidAP, IPC_RMID, NULL);
       destroyClk(true);
       kill(schedulerPid, SIGINT);
+      raise(SIGINT);
     } 
 }
 

@@ -8,7 +8,10 @@ typedef struct node {
     int burstTime; 
     int priority;
     int remainingTime; // only necassary when using SRTN, initially set as burst time, then changed for SRTN processes as they proceed
-    int status; // -1 = not arrived, 1 = running, 2 = waiting
+    int waitingTime; // counter for the clock cycles a processes waited
+    int finishingTime;
+    int WTA;
+    int status; // -1 = not arrived, 1 = running, 2 = waiting, 3 = finished.
     int pid; // to be set when process is forked from scheduler
   
     struct node* next; 
@@ -23,6 +26,9 @@ Node* newNode(int id, int at, int bt, int p)
     n->burstTime = bt;  
     n->priority = p; 
     n->remainingTime = bt;
+    n->waitingTime = 0;
+    n->finishingTime = 0;
+    n->WTA = 0;
     n->status = -1; 
     n->pid = -1; 
     n->next = NULL; 
@@ -72,6 +78,18 @@ Node* dequeue(queue *q)
     temp = q->head;
     q->head = (q->head)->next; 
     return temp;
+}
+
+void incrementWaiting(queue *q) 
+{
+    if (q->head == NULL) return;
+    Node *current;
+    current = q->head;
+
+    while (current != NULL) {
+        current->waitingTime++;
+        current = current->next;
+    }
 }
 
 
@@ -124,6 +142,18 @@ int ppeek(pqueue *q)
     return (q -> head -> priority);
 } 
 
+void pincrementWaiting(pqueue *q) 
+{
+    if (q->head == NULL) return;
+    Node *current;
+    current = q->head;
+
+    while (current != NULL) {
+        current->waitingTime++;
+        current = current->next;
+    }
+}
+
 // Heap by burst time for ready processes in SJF scheduler (no preemption so running processes move to completed processes queue right away)
 typedef struct burstQueue {
     Node *head; 
@@ -172,6 +202,18 @@ int bpeek(bqueue *q)
 { 
     return (q -> head -> burstTime);
 } 
+
+void bincrementWaiting(bqueue *q) 
+{
+    if (q->head == NULL) return;
+    Node *current;
+    current = q->head;
+
+    while (current != NULL) {
+        current->waitingTime++;
+        current = current->next;
+    }
+}
 
 // Heap by remaining time for ready processes in SRTN scheduler (the running process will be saved individually)
 typedef struct remainingQueue {
@@ -222,3 +264,14 @@ int rpeek(rqueue *q)
     return (q -> head -> remainingTime);
 } 
 
+void rincrementWaiting(rqueue *q) 
+{
+    if (q->head == NULL) return;
+    Node *current;
+    current = q->head;
+
+    while (current != NULL) {
+        current->waitingTime++;
+        current = current->next;
+    }
+}
