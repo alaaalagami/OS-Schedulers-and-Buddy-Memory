@@ -21,6 +21,7 @@ int main(int agrc, char * argv[])
 
     while (remainingtime > 0)
     {
+
         // If 1 second passes, increments time counter and decrements remaining time 
         if (getClk() > timeNow) 
         {
@@ -31,10 +32,8 @@ int main(int agrc, char * argv[])
     }
     
     printf("%d: Process #%d time has ended\n", getClk(), ID);
-
     // When remaining time ends, a process detaches from clock and sends its PID as exit code to the scheduler
     destroyClk(false);
-
     kill(getppid(), SIGUSR2);
    // int myPid = getpid();
    // exit(myPid);

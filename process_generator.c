@@ -9,19 +9,23 @@ queue* allProcesses;
 int time; // stores current time 
 int schedulerPid; // stores the PID of the scheduler
 int shmidAP; 
+int shmidReturnedP;
+//int msgqid; 
+//int ReturnedPcount;
+//struct msgbuff message; 
 
 // Function to read incoming processes file, save it into a queue, and return the queue
 queue* readFile(char *f)
 {
-   int i, a, b, p;
+   int i, a, b, p, m;
    queue *Q = (queue*)malloc(sizeof(queue));
    FILE *fp = fopen (f, "r");
    char line[100] = {0};
    char *ignore = fgets (line, 100, fp);
    Node* n;
-   while(fscanf(fp, "%d %d %d %d", &i, &a, &b, &p) == 4)
+   while(fscanf(fp, "%d %d %d %d %d", &i, &a, &b, &p, &m) == 5)
    {    
-    n = newNode(i, a, b, p);
+    n = newNode(i, a, b, p, m);
     enqueue(Q, n); 
    }
    fclose(fp);
@@ -70,6 +74,34 @@ int main(int argc, char * argv[])
         exit(-1);
     }
 
+   
+    // Message bufer to recieve returned processes that do not fit into scheduler memory
+   // msgqid = msgget(303, IPC_CREAT | 0666); 
+   // if(msgqid == -1)
+  //  {
+  //      perror("Error in create");
+  //      exit(-1);
+  //  }
+
+
+    // Shared memory to store number of returned processes
+    shmidReturnedP = shmget(501, 4, IPC_CREAT | 0644);
+    if ((long)shmidReturnedP == -1)
+    {
+        perror("Error in creating shm!");
+        exit(-1);
+    }
+
+   
+    //int * ReturnedPcount3= (int *) shmat(shmidReturnedP, (void *)0, 0);
+    //if ((long)ReturnedPcount3== -1)
+    //{
+    //    perror("Error in attaching to shmidReturnedP!");
+    //    exit(-1);
+    //}
+    //*ReturnedPcount3= 0; /* initialize shared memory */
+    //shmdt(ReturnedPcount3);
+
     // Create clock
    int clockPid = fork();
 
@@ -107,18 +139,40 @@ int main(int argc, char * argv[])
 
     // Initialize time counter
     time = -1;
-
     //printf("current time is %d\n", startTime);
-    Node* n = newNode(0, 0, 0, 0);
+    Node* n = newNode(0, 0, 0, 0, 0);
+    //int * ReturnedPcount2;
     while(1)
     {
       // If 1 clock second passes, increment internal time counter and check queue of all processes
       if (getClk() > time)
         {
+          //ReturnedPcount2 = (int *) shmat(shmidReturnedP, (void *)0, 0);
+          //ReturnedPcount = *ReturnedPcount2; 
+          //(*ReturnedPcount2) = 0; 
+          //shmdt(ReturnedPcount2); 
+      
           time++;
           arrivedProc = (Node*)shmat(shmidAP, NULL, 0); 
+
+          //if (ReturnedPcount > 0)
+          //{
+          // printf("Number of processes returned to Generator = %d\n", ReturnedPcount);
+          // int rec_val = msgrcv(msgqid, (void *)  &message, sizeof(message.ReturnedP), 0, !IPC_NOWAIT);
+ 
+          // if(rec_val == -1)
+          //   perror("Error in receive");
+
+          //printf("Received process %d from scheduler\n", message.ReturnedP.ID);
+          // n = newNode(message.ReturnedP.ID, message.ReturnedP.arrivalTime, message.ReturnedP.burstTime, message.ReturnedP.priority, message.ReturnedP.memsize);
+
+           //*arrivedProc = *n;
+//printf("%d: arrived now %d\n", getClk(), arrivedProc->ID);
+          // ReturnedPcount--; 
+ 
+          //}
           // If any process arrived at this second, add it to arrived process shared memory and signal scheduler to execute second
-          if (!isEmpty(allProcesses) && peek(allProcesses) == time)
+         if (!isEmpty(allProcesses) && peek(allProcesses) == time)
           {
            n = dequeue(allProcesses);
            *arrivedProc = *n;
@@ -148,6 +202,21 @@ int main(int argc, char * argv[])
 void sendProcess(int signum)
 {
     arrivedProc = (Node*)shmat(shmidAP, NULL, 0); 
+   // if (ReturnedPcount > 0)
+   // { 
+    //   printf("Number of processes returned to Generator = %d\n", ReturnedPcount);
+    // int rec_val2 = msgrcv(msgqid, (void *) &message, sizeof(message.ReturnedP), 0, !IPC_NOWAIT);
+
+   //  if(rec_val2 == -1)
+   //   perror("Error in receive");
+
+    // Node *n= newNode(message.ReturnedP.ID, message.ReturnedP.arrivalTime, message.ReturnedP.burstTime, message.ReturnedP.priority, message.ReturnedP.memsize); 
+    //  printf("Received process %d from scheduler\n", message.ReturnedP.ID);
+    //  *arrivedProc = *n;
+//printf("%d: 2nd arrived now %d\n",getClk(), arrivedProc->ID);
+  //    ReturnedPcount--; 
+   // }
+
     if (!isEmpty(allProcesses) && peek(allProcesses) == time)
     {
      Node* n = dequeue(allProcesses);
@@ -169,6 +238,8 @@ void endProgram(int signum)
     if (isEmpty(allProcesses))
     {
       shmctl(shmidAP, IPC_RMID, NULL);
+      shmctl(shmidReturnedP, IPC_RMID, NULL);
+      //msgctl(msgqid, IPC_RMID, NULL);
       destroyClk(true);
       kill(schedulerPid, SIGINT);
       raise(SIGINT);

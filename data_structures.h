@@ -1,12 +1,16 @@
 #include <stdio.h> 
 #include <stdlib.h> 
 
+// PROCESS STRUCTURES
 // Define process node
 typedef struct node { 
     int ID; 
     int arrivalTime;
     int burstTime; 
     int priority;
+    int memsize; 
+    int memIndex; // starting index of process in memory (indeces run from 0 to 1023), initially set to -1
+    int memPower; // stores the log2(memsize) rounded up, initially set to -1
     int remainingTime; // only necassary when using SRTN, initially set as burst time, then changed for SRTN processes as they proceed
     int waitingTime; // counter for the clock cycles a processes waited
     int finishingTime;
@@ -18,13 +22,16 @@ typedef struct node {
   
 } Node;
 
-Node* newNode(int id, int at, int bt, int p) 
+Node* newNode(int id, int at, int bt, int p, int m) 
 { 
     Node* n = (Node*)malloc(sizeof(Node)); 
     n->ID = id;
     n->arrivalTime = at; 
     n->burstTime = bt;  
     n->priority = p; 
+    n->memsize = m; 
+    n->memIndex = -1; 
+    n->memPower = -1; 
     n->remainingTime = bt;
     n->waitingTime = 0;
     n->finishingTime = 0;
@@ -275,3 +282,40 @@ void rincrementWaiting(rqueue *q)
         current = current->next;
     }
 }
+
+// MEMORY STRUCTURES 
+// Define memory node
+typedef struct memnode { 
+
+    int startIndex; // index of memory where partition starts (indices range from 0 till 1023
+
+    struct memnode* next; 
+  
+} memNode;
+
+memNode* newmemNode(int i) 
+{ 
+    memNode* n = (memNode*)malloc(sizeof(memNode)); 
+    n->startIndex = i;
+ 
+    n->next = NULL;   
+    return n; 
+}
+
+// Define empty memory linked list
+typedef struct MemoryDLL {
+    struct memnode *head;
+} memory; 
+
+memNode* mgetHead(memory *m)
+{
+    return (m->head);
+}
+
+
+// Message buffer for sending processes back to process generator or scheduler 
+struct msgbuff
+{
+    int mtype; 
+    Node ReturnedP; 
+};
