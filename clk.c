@@ -37,12 +37,10 @@ int main(int argc, char * argv[])
         exit(-1);
     }
     *shmaddr = clk; /* initialize shared memory */
-    printf("el clock el3mlet\n");
     
     while (1)
     {
         sleep(1);
         (*shmaddr)++;
-        //printf("I am clock and time now is %d\n", *shmaddr );
     }
 }

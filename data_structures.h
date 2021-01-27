@@ -312,10 +312,3 @@ memNode* mgetHead(memory *m)
     return (m->head);
 }
 
-
-// Message buffer for sending processes back to process generator or scheduler 
-struct msgbuff
-{
-    int mtype; 
-    Node ReturnedP; 
-};

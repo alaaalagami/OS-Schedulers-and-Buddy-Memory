@@ -27,7 +27,7 @@ int main(int agrc, char * argv[])
         {
           remainingtime--; 
           timeNow = getClk();
-          printf("%d: Process #%d: %d and timeNow = %d\n", getClk(), ID, remainingtime, timeNow);
+          printf("%d: Time left for Process #%d: %d\n", getClk(), ID, remainingtime);
         }
     }
     
@@ -35,8 +35,6 @@ int main(int agrc, char * argv[])
     // When remaining time ends, a process detaches from clock and sends its PID as exit code to the scheduler
     destroyClk(false);
     kill(getppid(), SIGUSR2);
-   // int myPid = getpid();
-   // exit(myPid);
     raise(SIGINT);
     
     return 0;
@@ -45,8 +43,6 @@ int main(int agrc, char * argv[])
 // Sends remaining time back to scheduler when stopped by scheduler 
 void sendRT(int signum)
 {
-  //  printf("%d: Process %d is getting preempted. Remain time = %d\n", getClk(), ID, remainingtime);
-
     int shmidRT = shmget(49, sizeof(int*), 0);
     int *shmaddr = (int*)shmat(shmidRT, NULL, 0);
     if(shmaddr == (void*)-1)
@@ -68,7 +64,6 @@ void sendRT(int signum)
        raise(SIGINT);
     }
 
- //   signal(SIGSTOP, SIG_DFL);
      raise(SIGSTOP);
 }
 

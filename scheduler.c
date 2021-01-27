@@ -13,6 +13,7 @@ int scheduler; // Stores scheduler type (1 = HPF, 2 = SJF, 3 = RR, 4 = SRTN)
 int quantum;
 int quantumCounter;
 int shmidAP;
+int time;
 Node *arrivedProc; 
 int shmidRT; 
 bool isBusy; // Flag to know if there is a current running process
@@ -20,7 +21,6 @@ Node* runningProcess;
 int numProcesses;
 int msgqid;
 int shmidReturnedP; 
-struct msgbuff message;
 
 
 // Data structures to be used by the different scheduler types to store PCBs 
@@ -45,7 +45,7 @@ int main(int argc, char * argv[])
     int time = getClk();
     scheduler = atoi(argv[1]); // scheduler type
     quantum = atoi(argv[2]); // time quantum if using Round Robin
-    printf("%d %d\n", scheduler, quantum); // Just here to test when the program fails and the program fails even before coming here :)
+    time = getClk();
 
     signal(SIGUSR1, executeSecond); // Takes incoming arrived process from process_generator and excutes the second's scheduling
     signal(SIGINT, endScheduler); // Ends scheduler when interrupted or ended by process_generator 
@@ -82,20 +82,7 @@ int main(int argc, char * argv[])
     
     // Shared memory for stopped process to place its remaining time
     shmidRT = shmget(49, sizeof(int*), IPC_CREAT|0644);
-    //int *shmaddr = (int*)shmat(shmidRT, NULL, 0);
-    //if(shmaddr == (void*)-1)
-    //{
-    //    perror("Error in attach in scheduler RT");
-    //    exit(-1);
-    //}
 
-    // Message bufer to send returned processes that do not fit into scheduler memory
-    //msgqid = msgget(303, 0); 
-    //if(msgqid == -1)
-    //{
-    //    perror("Error in create");
-    //    exit(-1);
-    //}
     // Shared memory to store number of returned processes
     shmidReturnedP = shmget(501, 4, 0);
     if ((long)shmidReturnedP == -1)
@@ -121,7 +108,6 @@ int main(int argc, char * argv[])
 // Takes incoming arrived process from process_generator and excutes the second's scheduling
 void executeSecond(int signum)
 {
-    // WE SHOULD ATTACH HERE
     Node* n; // Spare Node pointer
     arrivedProc = (Node*)shmat(shmidAP, NULL, 0);
     if(arrivedProc == (void*)-1)
@@ -129,42 +115,23 @@ void executeSecond(int signum)
         perror("Error in attach in scheduler AP");
         exit(-1);
     }
-    
-    printf("Checking unallocated processes....\n");
-    while(getHead(unallocatedQ)){
-      n = dequeue(unallocatedQ);
-      n->next = NULL;
-      bool allocated = allocateMemory(n);
-      if (allocated){
-        if (scheduler == 1){
-          ppush(pQ, n);
-          printf("%d: Pushed process #%d! \n",getClk(),n->ID);
-        }
-        else if (scheduler == 2){
-         bpush(bQ, n);
-         printf("%d: Pushed process #%d! \n",getClk(),n->ID);
-        } 
-        else if (scheduler == 3){
-         enqueue(Q, n);
-         printf("%d: Pushed process #%d! \n",getClk(),n->ID);
-        }
-        else{
-         rpush(rQ, n);
-         printf("%d: Pushed process #%d! \n",getClk(),n->ID);
-       }
-      }
-      else{
-  //      printf("Putting %d in tempQ\n", n->ID);
-        enqueue(tempQ, n);
-      }
+    if (getClk() > time){
+     printf("Checking unallocated processes....\n");
+      while(getHead(unallocatedQ)){
+        n = dequeue(unallocatedQ);
+        n->next = NULL;
+        bool allocated = allocateMemory(n);
+
+        if (!allocated)
+          enqueue(tempQ, n);  
+     }
+     time++;
     }
 
     while(getHead(tempQ)){
        n = dequeue(tempQ);
- //      printf("Entered to get %d!\n", n->ID);
        n->next = NULL;
        enqueue(unallocatedQ, n);
- //      printf("Putting %d back in unallocatedQ\n", getHead(unallocatedQ)->ID);
     }
 
 
@@ -174,32 +141,12 @@ void executeSecond(int signum)
       printf("%d: Process #%d Arrived! \n",getClk(),arrivedProc->ID);
       numProcesses++;
       Node* recieved = newNode(arrivedProc->ID,arrivedProc->arrivalTime,arrivedProc->burstTime, arrivedProc->priority, arrivedProc->memsize);
+
       // Allocate in memory
       bool allocated = allocateMemory(recieved); 
-      //bool allocated = 1;  
-      // If allocated, place in scheduler waiting queue
-      if (allocated) 
-      {
-       if (scheduler == 1){
-        ppush(pQ, recieved);
-        printf("%d: Pushed process #%d! \n",getClk(),arrivedProc->ID);
-       }
-       else if (scheduler == 2){
-        bpush(bQ, recieved);
-        printf("%d: Pushed process #%d! \n",getClk(),arrivedProc->ID);
-       } 
-       else if (scheduler == 3){
-        enqueue(Q, recieved);
-        printf("%d: Pushed process #%d! \n",getClk(),arrivedProc->ID);
-       }
-       else{
-        rpush(rQ, recieved);
-        printf("%d: Pushed process #%d! \n",getClk(),arrivedProc->ID);
-       }
-      }
-      else{
+
+      if (!allocated) 
         enqueue(unallocatedQ, recieved);
-      }
 
       kill(getppid(), SIGUSR1); // Requests other arrived processes if any
     }
@@ -358,7 +305,7 @@ void executeSecond(int signum)
         rincrementWaiting(rQ);
       }
     }
-    //WE SHOULD DETACH HERE
+
     shmdt(arrivedProc);
 
     if (!getHead(Q) && !pgetHead(pQ) && !bgetHead(bQ) && !rgetHead(rQ) && !isBusy){
@@ -369,8 +316,6 @@ void executeSecond(int signum)
 // Frees the scheduler when a process is finished 
 void freeScheduler(int signum)
 {
-printf("freeing %d\n", runningProcess->ID);
-
   isBusy = false;
   runningProcess->finishingTime = getClk();
   Node* myNode = newNode(runningProcess->ID, runningProcess->arrivalTime, runningProcess->burstTime, runningProcess->priority, runningProcess->memsize);
@@ -477,7 +422,7 @@ void printProcess(Node* n, char status[]){
 
 // Memory allocation 
 bool allocateMemory(Node *Proc){
-  printf("in allocate %d\n", Proc->ID); 
+  printf("Allocating Process %d\n", Proc->ID); 
   int pSize = Proc->memsize; 
   int tempSize = pSize; 
   int power = 0;
@@ -495,7 +440,7 @@ bool allocateMemory(Node *Proc){
     power++; 
     neededSize = pow(2,power);
   }
-printf("Needed Size = %d\n", neededSize); 
+  printf("Needed Size = %d\n", neededSize); 
   Proc->memPower = power;  
  
   int propower = power; 
@@ -508,31 +453,36 @@ printf("Needed Size = %d\n", neededSize);
     M[power]->head = m->next;
     tempIndex = m->startIndex;
     Proc->memIndex = tempIndex; 
-printf("Start Index = %d\n", Proc->memIndex); 
+    printf("Start Index = %d\n", Proc->memIndex); 
     while (power > propower)
     {
       power--;
       memNode * newmem = newmemNode(tempIndex + pow(2,power));
       M[power]->head = newmem; 
     }
+
+    // If allocated, place in scheduler waiting queue
+    if (scheduler == 1){
+      ppush(pQ, Proc);
+      printf("%d: Pushed process #%d! \n",getClk(),Proc->ID);
+    }
+    else if (scheduler == 2){
+      bpush(bQ, Proc);
+      printf("%d: Pushed process #%d! \n",getClk(),Proc->ID);
+    } 
+    else if (scheduler == 3){
+      enqueue(Q, Proc);
+      printf("%d: Pushed process #%d! \n",getClk(),Proc->ID);
+    }
+    else{
+      rpush(rQ, Proc);
+      printf("%d: Pushed process #%d! \n",getClk(),Proc->ID);
+    }
     fprintf(memFile, "At\ttime\t%d\tallocated\t%d\tbytes\tfor\tprocess\t%d\tfrom\t%d\tto\t%d\n", getClk(),Proc->memsize, Proc->ID, tempIndex, tempIndex + (int)pow(2, propower) - 1);
-    printf("At time %d allocated %d bytes for process %d from %d to %d\n", getClk(),Proc->memsize, Proc->ID, tempIndex, tempIndex + (int)pow(2, propower) - 1);
     return 1; 
   } 
   else 
   {
-//    int* ReturnedPcount = (int *) shmat(shmidReturnedP, (void *)0, 0);
-//    (*ReturnedPcount)++;
-//    shmdt(ReturnedPcount);
-
-//    message.mtype = 1; 
-//    message.ReturnedP = *Proc;
-//    printf("Sent process %d back to generator\n", message.ReturnedP.ID);
-
-//    int send_val = msgsnd(msgqid, (const void *) &message, sizeof(message.ReturnedP), !IPC_NOWAIT);
-
-//    if(send_val == -1)
-//        perror("Errror in send");
     printf("Process %d could not be allocated..\n", Proc->ID);
     return 0; 
   }
@@ -542,7 +492,7 @@ printf("Start Index = %d\n", Proc->memIndex);
 // Memory deallocation 
 void deallocateMemory(Node *Proc)
 {
-  printf("in deallocate %d\n", Proc->ID); 
+  printf("Deallocating Process %d\n", Proc->ID); 
   int tempSize = Proc->memsize; 
   int tempIndex = Proc->memIndex; 
   int buddyIndex; 
@@ -569,7 +519,6 @@ void deallocateMemory(Node *Proc)
     found = 0; 
     while (m!=NULL)
     {
-  // printf("%d\n",m->startIndex);
       found = 0; 
       if (m->startIndex==buddyIndex)
       {
@@ -583,7 +532,6 @@ void deallocateMemory(Node *Proc)
       p = m; 
       m = m->next;
     } 
-   // printf("%d\n", found);
     if (!found)
     { 
      memNode * newmem = newmemNode(tempIndex); 
