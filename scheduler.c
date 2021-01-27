@@ -90,12 +90,12 @@ int main(int argc, char * argv[])
     //}
 
     // Message bufer to send returned processes that do not fit into scheduler memory
-    msgqid = msgget(303, 0); 
-    if(msgqid == -1)
-    {
-        perror("Error in create");
-        exit(-1);
-    }
+    //msgqid = msgget(303, 0); 
+    //if(msgqid == -1)
+    //{
+    //    perror("Error in create");
+    //    exit(-1);
+    //}
     // Shared memory to store number of returned processes
     shmidReturnedP = shmget(501, 4, 0);
     if ((long)shmidReturnedP == -1)
@@ -129,9 +129,11 @@ void executeSecond(int signum)
         perror("Error in attach in scheduler AP");
         exit(-1);
     }
-
+    
+    printf("Checking unallocated processes....\n");
     while(getHead(unallocatedQ)){
-      Node* n = dequeue(unallocatedQ);
+      n = dequeue(unallocatedQ);
+      n->next = NULL;
       bool allocated = allocateMemory(n);
       if (allocated){
         if (scheduler == 1){
@@ -151,19 +153,25 @@ void executeSecond(int signum)
          printf("%d: Pushed process #%d! \n",getClk(),n->ID);
        }
       }
-      else
+      else{
+  //      printf("Putting %d in tempQ\n", n->ID);
         enqueue(tempQ, n);
+      }
     }
 
     while(getHead(tempQ)){
-       Node* n = dequeue(tempQ);
+       n = dequeue(tempQ);
+ //      printf("Entered to get %d!\n", n->ID);
+       n->next = NULL;
        enqueue(unallocatedQ, n);
+ //      printf("Putting %d back in unallocatedQ\n", getHead(unallocatedQ)->ID);
     }
-        
+
 
     // Add arrived process to scheduler's working queue
     if (arrivedProc->ID > 0)
     {
+      printf("%d: Process #%d Arrived! \n",getClk(),arrivedProc->ID);
       numProcesses++;
       Node* recieved = newNode(arrivedProc->ID,arrivedProc->arrivalTime,arrivedProc->burstTime, arrivedProc->priority, arrivedProc->memsize);
       // Allocate in memory
